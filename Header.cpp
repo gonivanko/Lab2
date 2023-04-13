@@ -8,8 +8,6 @@ struct HoursMinutes
 struct Ampoule
 {
 	char name[50];
-	//int validity_hours;
-	//int validity_minutes;
 	HoursMinutes validity;
 	float shelf_life;
 };
@@ -30,16 +28,25 @@ string create_first_file()
 	int n = 3;
 	char flag = 'y';
 	cout << "Enter first file name: "; getline(cin, file_name);
-	//cout << file_name << endl;
-	ofstream file(file_name, ios::binary);
-	cout << "Enter ampoule information (enter \"stop\" to stop):" << endl;
+	ifstream not_new_file(file_name, ios::binary);
+	if (not_new_file)
+	{
+		cout << "Do you want to append to file? (y/n) "; cin >> flag; cin.ignore();
+		if (flag != 'y' && flag != 'Y') 
+		{
+			not_new_file.close();
+			remove(file_name.c_str());
+			flag = 'y';
+		}
+	}
+	
+	ofstream file(file_name, ios::binary | ios::app);
+	cout << "Enter ampoule information:" << endl;
 	int i = 0;
 	while (flag == 'y' || flag == 'Y')
 	{
 		cout << i + 1 << ". " << "Enter ampoule name: ";
 		cin.getline(ampoule.name, sizeof(ampoule.name));
-		cout << ampoule.name << "|" << endl;
-		cout << ampoule.name << " == \"stop\": " << (ampoule.name == "stop") << endl;
 		do
 		{
 			error = 0;
@@ -54,14 +61,14 @@ string create_first_file()
 		} while (error);
 
 		cout << "Enter ampoule shelf life (in years) : "; cin >> ampoule.shelf_life; cin.ignore();
-		cout << ampoule.shelf_life << endl;
 		file.write((char*)&ampoule, sizeof(Ampoule));
 		cout << "Continue? (y/n) "; cin >> flag; cin.ignore();
 		i++;
 		cout << "==========================================" << endl;
 	}
-
 	file.close();
+	cout << "So, here's your first file: " << endl;
+	print_file1(file_name);
 
 	return file_name;
 }
@@ -78,7 +85,6 @@ string create_second_file(string file1_name)
 	{
 		error = 0;
 		cout << "Enter second file name: "; getline(cin, file2_name);
-		cout << file2_name << endl;
 		if (file2_name == file1_name)
 		{
 			cout << "Error. Name of first and second files shouldn't be equal. Please enter second file name again." << endl;
@@ -88,21 +94,18 @@ string create_second_file(string file1_name)
 
 	ifstream file1(file1_name, ios::binary);
 	ofstream file2(file2_name, ios::binary);
-	//cout << "Ampoule names:" << endl;
-	cout << "Enter ampoule opening time:" << endl;
 	while (file1.read((char*)&a1, sizeof(Ampoule)))
 	{
 		cout << "Name: " << a1.name << endl;
 		cout << "Was it opened?(y/n) "; cin >> flag; cin.ignore();
 		if (flag == 'y' || flag == 'Y')
 		{
-			//opened_ampoule.name = a1.name;
 			strcpy_s(opened_ampoule.name, sizeof(a1.name), a1.name);
 
 			do
 			{
 				error = 0;
-				cout << "opening time: ";
+				cout << "Opening time: ";
 				getline(cin, input);
 				sscanf_s(input.c_str(), "%d:%d", &(hours), &(minutes));
 
@@ -118,7 +121,6 @@ string create_second_file(string file1_name)
 				}
 			} while (error);
 
-			cout << "Hours: " << hours << ", minutes: " << minutes << endl;
 			opened_ampoule.opening_time.hours = hours, opened_ampoule.opening_time.minutes = minutes;
 			minutes += a1.validity.minutes;
 			if (minutes >= 60)
@@ -129,13 +131,15 @@ string create_second_file(string file1_name)
 			hours = (hours + a1.validity.hours) % 24;
 			opened_ampoule.expiration_time.hours = hours;
 			opened_ampoule.expiration_time.minutes = minutes;
-			cout << "Best before: " << opened_ampoule.expiration_time.hours << ", minutes: " << opened_ampoule.expiration_time.minutes << endl;
+			cout << "Best before: " << opened_ampoule.expiration_time.hours << " hours, " << opened_ampoule.expiration_time.minutes << " minutes" << endl;
 			file2.write((char*)&opened_ampoule, sizeof(OpenedAmpoule));
 
 		}
 	}
 	cout << "==========================================" << endl;
 	file1.close(); file2.close();
+	cout << "And here's your second file:" << endl;
+	print_file2(file2_name);
 	return file2_name;
 }
 
@@ -145,39 +149,39 @@ void delete_expired(string second_file_name)
 	ofstream copy_file("copy_file.txt", ios::binary);
 	OpenedAmpoule a;
 	time_t now = time(0);
-	bool expired = 1;
-
-	cout << "Number of sec since January 1,1970 is:: " << now << endl;
+	bool expired = 1, same_day, after_opening, before_expiry;
 
 	tm* ltm = new tm;
 	localtime_s(ltm, &now);
 
-	cout << "Current local time: " << ltm->tm_hour << " hours, " << ltm->tm_min << " minutes" << endl;
 	while (second_file.read((char*)&a, sizeof(OpenedAmpoule)))
 	{
 		expired = 1;
-		//cout << "Exp. hours: " << a.expiration_time.hours << " openining hours: " << a.opening_time.hours << endl;
-		//cout << "a.expiration_time.hours > a.opening_time.hours = " << (a.expiration_time.hours > a.opening_time.hours) << endl;
-		//cout << "ltm->tm_hour < a.expiration_time.hours = " << (ltm->tm_hour < a.expiration_time.hours) << endl;
-		//cout << "ltm->tm_hour > a.opening_time.hours = " << (ltm->tm_hour > a.opening_time.hours) << endl;
-		if (a.expiration_time.hours > a.opening_time.hours)
+
+		same_day = a.expiration_time.hours >= a.opening_time.hours;
+		before_expiry = (ltm->tm_hour < a.expiration_time.hours) || ((ltm->tm_hour == a.expiration_time.hours) && (ltm->tm_min < a.expiration_time.minutes));
+		after_opening = (ltm->tm_hour > a.opening_time.hours) || ((ltm->tm_hour == a.opening_time.hours) && (ltm->tm_min > a.opening_time.minutes));
+
+		
+		if (same_day)
 		{
-			if (ltm->tm_hour < a.expiration_time.hours && ltm->tm_hour > a.opening_time.hours) expired = 0;
-			/*cout << "ltm->tm_hour < a.expiration_time.hours && ltm->tm_hour > a.opening_time.hours = " << (ltm->tm_hour < a.expiration_time.hours && ltm->tm_hour > a.opening_time.hours) << endl;*/
+			if (before_expiry && after_opening) expired = 0;
 		}
 		else
 		{
-			if ((ltm->tm_hour < a.expiration_time.hours) || (ltm->tm_hour > a.opening_time.hours)) expired = 0;
-			//cout << "(ltm->tm_hour < a.expiration_time.hours) || (ltm->tm_hour > a.opening_time.hours) = " << ((ltm->tm_hour < a.expiration_time.hours) || (ltm->tm_hour > a.opening_time.hours)) << endl;
+			if (before_expiry || after_opening) expired = 0;
 		}
-		cout << a.name << ", expired: " << expired << endl;
 
 		if (!expired) copy_file.write((char*)&a, sizeof(OpenedAmpoule));
-		cout << "==========================================" << endl;
 	}
 	second_file.close(); copy_file.close();
 	remove(second_file_name.c_str());
 	if (rename("copy_file.txt", second_file_name.c_str()) != 0) cout << "Error renaming file \"copy_file.txt\"" << endl;
+
+	cout << "Now let's delete expired ampoules" << endl;
+	cout << "==========================================" << endl;
+	cout << "Here's your second file after deleting:" << endl;
+	print_file2(second_file_name);
 
 }
 

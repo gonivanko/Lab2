@@ -10,10 +10,7 @@
 int main()
 {
 	string f1_name = create_first_file();
-	print_file1(f1_name);
 	string file2_name;
 	string f2_name = create_second_file(f1_name);
-	print_file2(f2_name);
 	delete_expired(f2_name);
-	print_file2(f2_name);
 }
